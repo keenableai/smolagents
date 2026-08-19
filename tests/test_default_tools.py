@@ -261,8 +261,18 @@ class TestKeenableSearchTool:
     def test_keyless_uses_public_endpoint(self):
         mock_response_data = {
             "results": [
-                {"title": "Keenable", "url": "https://keenable.ai", "description": "Search for AI agents."},
-                {"title": "Hugging Face", "url": "https://huggingface.co", "description": "The AI community."},
+                {
+                    "title": "Keenable",
+                    "url": "https://keenable.ai",
+                    "description": "",
+                    "snippet": "Search for AI agents.",
+                },
+                {
+                    "title": "Hugging Face",
+                    "url": "https://huggingface.co",
+                    "description": "",
+                    "snippet": "The AI community.",
+                },
             ]
         }
         tool = KeenableSearchTool(max_results=2)
@@ -293,6 +303,41 @@ class TestKeenableSearchTool:
         call = mock_post.call_args
         assert call.args[0] == "https://api.keenable.ai/v1/search"
         assert call.kwargs["headers"]["X-API-Key"] == "keen_test"
+
+    def test_reads_page_text_from_snippet(self):
+        """`description` is the page's meta description and is empty for most pages."""
+        tool = KeenableSearchTool(max_results=1)
+        tool.api_key = None
+        with patch("requests.post") as mock_post:
+            mock_post.return_value.json.return_value = {
+                "results": [
+                    {
+                        "title": "T",
+                        "url": "https://x.test",
+                        "description": "",
+                        "snippet": "line one\n\nline two",
+                    }
+                ]
+            }
+            mock_post.return_value.raise_for_status = lambda: None
+            result = tool("q")
+        assert "line one line two" in result
+
+    def test_falls_back_to_description_and_caps_page_text(self):
+        tool = KeenableSearchTool(max_results=2)
+        tool.api_key = None
+        with patch("requests.post") as mock_post:
+            mock_post.return_value.json.return_value = {
+                "results": [
+                    {"title": "Long", "url": "https://long.test", "snippet": "word " * 400},
+                    {"title": "Meta", "url": "https://meta.test", "description": "only a meta description"},
+                ]
+            }
+            mock_post.return_value.raise_for_status = lambda: None
+            result = tool("q")
+        assert "only a meta description" in result
+        long_block = result.split("[Long](https://long.test)\n")[1].split("\n\n")[0]
+        assert len(long_block) == 500
 
     def test_no_results_raises(self):
         tool = KeenableSearchTool()

@@ -413,9 +413,21 @@ class KeenableSearchTool(Tool):
         if not results:
             raise Exception("No results found! Try a less restrictive/shorter query.")
         return "## Search Results\n\n" + "\n\n".join(
-            f"{idx}. [{result.get('title', '')}]({result.get('url', '')})\n{result.get('description', '')}"
+            f"{idx}. [{result.get('title', '')}]({result.get('url', '')})\n{self._result_text(result)}"
             for idx, result in enumerate(results, start=1)
         )
+
+    @staticmethod
+    def _result_text(result: dict) -> str:
+        """Return the page text of one result.
+
+        Keenable returns both `snippet` and `description`: `snippet` carries the
+        page text and `description` is the page's meta description, which is empty
+        for most pages. It also returns whole pages rather than an excerpt, so the
+        text is collapsed and capped to the length the other search tools return.
+        """
+        text = " ".join(str(result.get("snippet") or result.get("description") or "").split())
+        return text[:500]
 
 
 class WebSearchTool(Tool):
